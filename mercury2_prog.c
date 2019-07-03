@@ -25,41 +25,27 @@
 // *                              Includes                                      *
 // ******************************************************************************
 
-/* Standard C libraries */
+// Standard C libraries
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <stdint.h> // fixed-width integer types https://en.wikipedia.org/wiki/C_data_types#stdint.h
+#include <stdint.h>
+#include <time.h>
 
-/* OS specific libraries */
+// OS-specific libraries
 #ifdef _WIN32
   #include <windows.h>
 #endif
 
-#include <time.h>   // for nanosleep
-
-/* Include D2XX header*/
-#ifdef _WIN32
-  #include "ftd2xx.h"
-#else
-  #include "ftd2xx.h"  
-#endif
+// FTDI D2XX header
+#include "ftd2xx.h"
 
 // ******************************************************************************
 // *                              Get time                                      *
 // ******************************************************************************
 
-/*
-uint64_t get_timestamp_milliseconds(void)
-{
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  uint64_t milliseconds = (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
-  return milliseconds;
-}
-*/
-
+// get timestamp in milliseconds
 uint64_t get_timestamp_milliseconds(void)
 {
   #ifdef _WIN32
@@ -174,7 +160,6 @@ static uint32_t FTDI_WriteBuffer_Length = 0;         // length of data in buffer
 
 // append byte to write buffer
 void FTDI_WriteBuffer_AppendByte(uint8_t val){
-  //printf("FTDI_WriteBuffer[%i] = 0x%02X\n", FTDI_WriteBuffer_Length, val);  
   FTDI_WriteBuffer[FTDI_WriteBuffer_Length++]=val;
 }
 
@@ -414,6 +399,7 @@ void Flash_EraseBlock(uint8_t block_addr, uint8_t n_blocks_total)
   FTDI_WriteBuffer_Send();                         // send out
 
   printf("Erasing block %i / %i = %.1f%%   \r", block_addr, n_blocks_total-1, ((float)(block_addr+1) / (float)n_blocks_total) * 100.0); 
+  fflush(stdout);
   while(Flash_GetStatus() == FLASH_BUSY);
 }
 
@@ -571,6 +557,16 @@ int FTDI_FindMercury2(void)
   }
   // Mercury 2 not found
   printf("ERROR: No Mercury 2 FPGA board found.\n"); 
+
+  #ifndef _WIN32
+  printf("\n");
+  printf("Please note that you may have to disable the FTDI VCP driver in order to use the D2XX driver.\n");
+  printf("You can do this by running: \033[0;1msudo rmmod ftdi_sio && sudo rmmod usbserial\033[0m\n");
+  printf("\n");
+  printf("See FTDI Application Note AN_220 for more details:\n");
+  printf("https://www.ftdichip.com/Support/Documents/AppNotes/AN_220_FTDI_Drivers_Installation_Guide_for_Linux.pdf\n");
+  printf("\n");
+  #endif
   exit(1);
 }
 
@@ -616,26 +612,35 @@ void FTDI_ConnectMercury2(int deviceID)
     printf("OK\n");
 }
 
+// release SPI lines and let FPGA boot
+void FTDI_ReleaseMercury2(void)
+{
+    FTDI_WriteBuffer_AppendArray(MPSSE_SpiDisconnect);
+    FTDI_WriteBuffer_AppendArray(MPSSE_StateIdle);
+    FTDI_WriteBuffer_Send();
+}
+
 // ******************************************************************************
 // *                            Dump flash to file                              *
 // ******************************************************************************
 
 void Flash_DumpToFile(int PagesToDump)
 {
-  FILE *fptr_dump; 
+  char* dump_filename = "dump.bit";
+  FILE *dump_fptr;
+  int dump_write_status;
   printf("\n***** DUMPING FLASH *****\n");
-  printf("%i Mbits = %i MBytes to dump.\n", PagesToDump/512, PagesToDump/4096);
-  
-  // Remove existing dump file, if necessary
-  if(fptr_dump = fopen("dump.bit", "r")){
-    fclose(fptr_dump);
-    if(remove("dump.bit") != 0)
-    {
-      printf("ERROR: Unable to remove existing: dump.bit\n"); exit(1);
-    }
+  printf("Saving %i MBytes (%i Mbits) to '%s'\n", PagesToDump/4096, PagesToDump/512, dump_filename);
+
+  // try to open file
+  dump_fptr = fopen(dump_filename, "wb");
+  if(dump_fptr == NULL || dump_fptr == 0)
+  {
+    printf("ERROR: Unable to open '%s'\n", dump_filename);
+    exit(1);
   }  
 
-  // allocate a 256 byte chunk for page dump
+  // allocate a 256 byte RAM chunk for page dump
   uint8_t* dump;
   dump = (uint8_t *)malloc(256 * sizeof(uint8_t));
   if(dump == 0)
@@ -644,24 +649,17 @@ void Flash_DumpToFile(int PagesToDump)
     exit(1);
   }  
   
-  // write to file
-  if(fopen("dump.bit", "wb") == 0)
+  // read from flash, write to file
+  for(int i=0; i<PagesToDump; i++)
   {
-    printf("ERROR: Unable to open: dump.bit");
-    exit(1);
-  }
-
-  // read from flash
-  for(int i; i<PagesToDump; i++)
-  {
-    Flash_ReadPage(i, dump, PagesToDump);
-    if(fwrite(dump, sizeof(uint8_t), 256, fptr_dump) == 0)
-      printf("ERROR: Unable to write...");
+    Flash_ReadPage(i, dump, PagesToDump); // read page into RAM
+    if(fwrite(dump, sizeof(uint8_t), 256, dump_fptr) == 0) // write page to file
+      printf("ERROR: Unable to write to '%s'\n", dump_filename);
   }
   printf("\n");
   
   // close file
-  fclose(fptr_dump);
+  fclose(dump_fptr);
 }
 
 // ******************************************************************************
@@ -691,14 +689,22 @@ int main(int argc, char** argv)
     // *@@@@@@@@@@@@@@@@@@@@@@@ HELP @@@@@@@@@@@@@@@@@@@@@@@@@@@@
     else if(!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"))
     {
-      printf("help!\n");
-      // TODO: Add help!
+      printf("OPTION            DESCRIPTION\n");
+      printf("-h, --help        print this help message\n");
+      printf("-l, --list        list all visible FTDI devices\n");
+      printf("-e, --erase       erase entire flash \n");
+      printf("-r, --read        read entire flash and save to 'dump.bit' \n");
+      printf("-w, --write       write flash using specified file\n");
+      printf("\n");
     }
     
     // *@@@@@@@@@@@@@@@@@@@@@@@ ERASE @@@@@@@@@@@@@@@@@@@@@@@@@@@
     else if(!strcmp(argv[1], "-e") || !strcmp(argv[1], "--erase"))
     {
-      FTDI_ConnectMercury2(FTDI_FindMercury2());  // connect to Mercury 2
+      FTDI_ConnectMercury2(FTDI_FindMercury2());     // connect to Mercury 2
+      printf("\n***** ERASING FLASH *****\n");
+      Flash_EraseBlocks(Flash_ReadCapacity()/65535); // erase flash
+      FTDI_ReleaseMercury2();                        // release SPI lines and let FPGA boot
     }    
     
     // *@@@@@@@@@@@@@@@@@@@@@ READ FLASH @@@@@@@@@@@@@@@@@@@@@@@@
@@ -706,11 +712,7 @@ int main(int argc, char** argv)
     {
       FTDI_ConnectMercury2(FTDI_FindMercury2());  // connect to Mercury 2
       Flash_DumpToFile(Flash_ReadCapacity()/256); // dump flash to file
-
-      // release SPI lines and let FPGA boot
-      FTDI_WriteBuffer_AppendArray(MPSSE_SpiDisconnect);
-      FTDI_WriteBuffer_AppendArray(MPSSE_StateIdle);      
-      FTDI_WriteBuffer_Send();
+      FTDI_ReleaseMercury2();                     // release SPI lines and let FPGA boot
     }
     
     // @@@@@@@@@@@@@@@@@@@@@ WRITE FLASH @@@@@@@@@@@@@@@@@@@@@@@@
@@ -836,9 +838,7 @@ int main(int argc, char** argv)
       printf("Effective speed  : %.3f kBytes/sec\n", (float)(file_bytes/1024) / total_time);
     
       // release SPI lines and let FPGA boot
-      FTDI_WriteBuffer_AppendArray(MPSSE_SpiDisconnect);
-      FTDI_WriteBuffer_AppendArray(MPSSE_StateIdle);      
-      FTDI_WriteBuffer_Send();
+      FTDI_ReleaseMercury2();
       
       sleep_ms(100);
     }
@@ -846,7 +846,7 @@ int main(int argc, char** argv)
     // @@@@@@@@@@@@@@@@@@@@ UNRECOGNIZED OPTION @@@@@@@@@@@@@@@@@@@@
     else
     {
-      printf("Unrecognized option. Try '-h' for help.");
+      printf("Unrecognized option. Try '-h' for help.\n");
       exit(1);
     }
   }
