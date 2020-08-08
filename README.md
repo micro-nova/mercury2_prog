@@ -16,9 +16,10 @@ Port A of the FT2232H is used by this application for configuration. Port B is f
 
 The `mercury2_prog` application is compiled on Linux using `make`. This has been tested on Ubuntu 18.04 using gcc 7.4.0 and mingw32-gcc-7.3. The build produces two binaries:
 - `mercury2_prog` - a native x86-64 Linux application
-- `mercury2_prog.exe` - a cross-compiled x86-64 Windows application
+- `mercury2_prog_x86-64.exe` - a cross-compiled x86-64 Windows application
+- `mercury2_prog_x86-32.exe` - a cross-compiled x86-32 Windows application
 
-Note that you must `sudo apt-get install mingw-tools mingw-w64-tools` to cross-compile for Windows.
+Note that you must `sudo apt-get install gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 mingw-w64-tools` to cross-compile for Windows.
 
 ## Sample Output
 
