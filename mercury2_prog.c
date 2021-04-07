@@ -801,8 +801,9 @@ int main(int argc, char** argv)
           printf("%02X ", expected_header[i]);
         printf("\n");
         // error!
-        printf("\nERROR: Incorrect header. Is this a Xilinx bitstream file?\n");
-        exit(1);
+        //printf("\nERROR: Incorrect header. Is this a Xilinx bitstream file?\n");
+        //exit(1);
+	printf("\nWARNING: Incorrect header. Is this a Xilinx bitstream file?\n");
       }
       
       // connect to Mercury 2 

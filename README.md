@@ -18,7 +18,7 @@ The `mercury2_prog` application is compiled on Linux using `make`. This has been
 - `mercury2_prog` - a native x86-64 Linux application
 - `mercury2_prog.exe` - a cross-compiled x86-64 Windows application
 
-Note that you must `sudo apt-get install mingw-tools mingw-w64-tools` to cross-compile for Windows.
+Note that you must `sudo apt-get install gcc-mingw-w64-x86-64` to cross-compile for Windows.
 
 ## Sample Output
 
