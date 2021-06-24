@@ -11,6 +11,7 @@ Port A of the FT2232H is used by this application for configuration. Port B is f
 - `-e` or `--erase` erases the entire SPI flash on the Mercury 2
 - `-r` or `--read` reads the entire SPI flash and saves it to `dump.bit`
 - `-w` or `--write` writes to the SPI flash using the specified file. For example: `./mercury2_prog -w test.bit`. (Note that this command will automatically erase the required blocks before writing.)
+- `-o VAL` or `--output VAL` outputs a 5-bit value, VAL, specified in decimal or hex to pins FTDI_ACBUS3-7 for 100 ms
 
 ## Build
 
