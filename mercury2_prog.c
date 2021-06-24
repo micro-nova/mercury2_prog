@@ -32,6 +32,8 @@
 #include <math.h>
 #include <stdint.h>
 #include <time.h>
+#include <inttypes.h>
+#include <errno.h>
 
 // OS-specific libraries
 #ifdef _WIN32
@@ -849,10 +851,15 @@ int main(int argc, char** argv)
     // *@@@@@@@@@@@@@@@@@@@@@@@ OUTPUT @@@@@@@@@@@@@@@@@@@@@@@@@@@
     else if((!strcmp(argv[1], "-o") || !strcmp(argv[1], "--output")) && argc > 2)
     {
-      // TODO: parse int from argv[2]
-      uint8_t var = 0x1F;
+      // parse int from argv[2]
+      intmax_t var = strtoimax(argv[2], NULL, 0);
+      if (errno == ERANGE || (var == 0 && strcmp(argv[2], "0")))
+      {
+        printf("\nFailed to interpret output value '%s' as decimal or hex value\n", argv[2]);
+        exit(1);
+      }
       FTDI_ConnectMercury2(FTDI_FindMercury2(), 0);         // connect to Mercury 2 without initializing flash interface
-      printf("\n***** OUTPUTTING 0x%x for 100 ms *****\n", var);
+      printf("\n***** OUTPUTTING 0x%X for 100 ms *****\n", (uint8_t)(var & 0b00011111));
       // output value on pins, We assume user has configured the 5 pins as inputs with either a pull up or pull down
       const uint8_t MPSSE_StateWriteData[] = {3, ACBUS_GPIO_WRITE_COMMAND, (var << 3) & 0b11111000, ACBUS_DIRECTION_OUTPUT};
       FTDI_WriteBuffer_AppendArray(MPSSE_StateWriteData);   // Configure write upper bits of ACB
