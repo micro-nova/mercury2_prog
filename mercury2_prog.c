@@ -338,7 +338,7 @@ int32_t Flash_ReadCapacity(void)
     // process read queue
     FTDI_ReadQueueProcess();
     // check flash manufacturer and device ID
-    if(FTDI_ReadBuffer[0] == 0x01 && FTDI_ReadBuffer[1] == 0x40)
+    if(FTDI_ReadBuffer[0] == 0x01 && (FTDI_ReadBuffer[1] == 0x40 || FTDI_ReadBuffer[1] == 0x60) )
     {
       // check flash capacity
       switch(FTDI_ReadBuffer[2])
